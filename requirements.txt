@@ -1,0 +1,6 @@
+boto3>=1.40.0,<2.0.0
+httpx
+trafilatura
+beautifulsoup4
+python-dotenv>=1.0.0,<2.0.0
+awscrt
