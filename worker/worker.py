@@ -44,7 +44,7 @@ def get_required_env(name: str) -> str:
 SQS_QUEUE_URL = get_required_env("SQS_QUEUE_URL")
 DYNAMODB_TABLE_NAME = get_required_env("DYNAMODB_TABLE_NAME")
 S3_BUCKET_NAME = get_required_env("S3_BUCKET_NAME")
-
+SNS_TOPIC_ARN = get_required_env("SNS_TOPIC_ARN")
 
 # ============================================================
 # AWS clients
@@ -52,6 +52,11 @@ S3_BUCKET_NAME = get_required_env("S3_BUCKET_NAME")
 
 sqs = boto3.client(
     "sqs",
+    region_name=AWS_REGION,
+)
+
+sns = boto3.client(
+    "sns",
     region_name=AWS_REGION,
 )
 
@@ -135,6 +140,32 @@ def save_result_to_s3(
 
     return key
 
+def publish_completion_notification(
+    job: dict,
+    pages_scraped: int,
+    s3_key: str,
+) -> None:
+    message = {
+        "event": "SCRAPING_COMPLETED",
+        "job_id": job["job_id"],
+        "website_url": job["website_url"],
+        "channel_id": job.get("slack_channel_id"),
+        "thread_ts": job.get("slack_thread_ts"),
+        "status": "COMPLETED",
+        "progress": 100,
+        "pages_scraped": pages_scraped,
+        "result_s3_key": s3_key,
+    }
+
+    sns.publish(
+        TopicArn=SNS_TOPIC_ARN,
+        Message=json.dumps(message),
+    )
+
+    print(
+        f"[SNS] Completion notification published "
+        f"for job: {job['job_id']}"
+    )
 
 # ============================================================
 # Job processing
@@ -216,6 +247,12 @@ def process_job(job: dict) -> None:
             pages_scraped=report.parsed_trafilatura_count,
             s3_prefix=f"jobs/{job_id}/",
             result_s3_key=s3_key,
+        )
+
+        publish_completion_notification(
+            job=job,
+            pages_scraped=report.parsed_trafilatura_count,
+            s3_key=s3_key,
         )
 
         print(f"[JOB] Completed job: {job_id}")
